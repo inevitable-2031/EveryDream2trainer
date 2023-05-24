@@ -22,7 +22,7 @@ import requests
 from transformers import Blip2Processor, Blip2ForConditionalGeneration, GitProcessor, GitForCausalLM, AutoModel, AutoProcessor
 
 import torch
-from  pynvml import *
+from pynvml import *
 
 import time
 from colorama import Fore, Style
@@ -40,7 +40,7 @@ def get_gpu_memory_map():
     nvmlInit()
     handle = nvmlDeviceGetHandleByIndex(0)
     info = nvmlDeviceGetMemoryInfo(handle)
-    return info.used/1024/1024
+    return info.used / 1024 / 1024
 
 def create_blip2_processor(model_name, device, dtype=torch.float16):
     processor = Blip2Processor.from_pretrained(model_name)
@@ -91,50 +91,38 @@ def main(args):
     # os.walk all files in args.data_root recursively
     for root, dirs, files in os.walk(args.data_root):
         for file in files:
-            #get file extension
+                        # get file extension
             ext = os.path.splitext(file)[1]
             if ext.lower() in SUPPORTED_EXT:
                 full_file_path = os.path.join(root, file)
-                image = Image.open(full_file_path)
-                start_time = time.time()
+                try:
+                    image = Image.open(full_file_path)
+                    start_time = time.time()
 
-                inputs = processor(images=image, return_tensors="pt", max_new_tokens=args.max_new_tokens).to(device, dtype)
+                    inputs = processor(images=image, return_tensors="pt", max_new_tokens=args.max_new_tokens).to(device, dtype)
 
-                generated_ids = model.generate(**inputs)
-                generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-                print(f"file: {file}, caption: {generated_text}")
-                exec_time = time.time() - start_time
-                print(f"  Time for last caption: {exec_time} sec.  GPU memory used: {get_gpu_memory_map()} MB")
+                    generated_ids = model.generate(**inputs)
+                    generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
+                    print(f"file: {file}, caption: {generated_text}")
+                    exec_time = time.time() - start_time
+                    print(f"  Time for last caption: {exec_time} sec.  GPU memory used: {get_gpu_memory_map()} MB")
 
-                # get bare name
-                name = os.path.splitext(full_file_path)[0]
-                #name = os.path.join(root, name)
-                if not os.path.exists(name):
-                    with open(f"{name}.txt", "w") as f:
-                        f.write(generated_text)
+                    # get bare name
+                    name = os.path.splitext(full_file_path)[0]
+                    if not os.path.exists(name):
+                        with open(f"{name}.txt", "w") as f:
+                            f.write(generated_text)
+                except (IOError, OSError):
+                    print(f"Skipping unidentified image: {file}")
+                    continue
 
-if __name__ == "__main__":
-    print(f"{Fore.CYAN}** Current supported models:{Style.RESET_ALL}")
-    print("     microsoft/git-base-textcaps")
-    print("     microsoft/git-large-textcaps")
-    print("     microsoft/git-large-r-textcaps")
-    print("     Salesforce/blip2-opt-2.7b - (9GB VRAM or recommend 32GB sys RAM)")
-    print("     Salesforce/blip2-opt-2.7b-coco - (9GB VRAM or recommend 32GB sys RAM)")
-    print("     Salesforce/blip2-opt-6.7b - (16.5GB VRAM or recommend 64GB sys RAM)")
-    print("     Salesforce/blip2-opt-6.7b-coco - (16.5GB VRAM or recommend 64GB sys RAM)")
-    print()
-    print(f"{Fore.CYAN} * The following will likely not work on any consumer GPUs or require huge sys RAM on CPU:{Style.RESET_ALL}")
-    print("     salesforce/blip2-flan-t5-xl")
-    print("     salesforce/blip2-flan-t5-xl-coco")
-    print("     salesforce/blip2-flan-t5-xxl")
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="Image Captioning")
+parser.add_argument("--data_root", type=str, default="images", help="Root directory of the image data")
+parser.add_argument("--model", type=str, default="salesforce/blip2-en-base", help="Model name or path")
+parser.add_argument("--force_cpu", action="store_true", help="Force CPU usage")
+parser.add_argument("--max_new_tokens", type=int, default=512, help="Maximum number of new tokens in the generated caption")
+args = parser.parse_args()
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", type=str, default="input", help="Path to images")
-    parser.add_argument("--model", type=str, default="salesforce/blip2-opt-2.7b", help="model from huggingface, ex. 'salesforce/blip2-opt-2.7b'")
-    parser.add_argument("--force_cpu", action="store_true", default=False, help="force using CPU even if GPU is available, may be useful to run huge models if you have a lot of system memory")
-    parser.add_argument("--max_new_tokens", type=int, default=24, help="max length for generated captions")
-    args = parser.parse_args()
-
-    print(f"** Using model: {args.model}")
-    print(f"** Captioning files in: {args.data_root}")
-    main(args)
+# Run the main function
+main(args)
